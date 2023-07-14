@@ -2,50 +2,67 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import pickle
 from torch.utils.data import Dataset, DataLoader
 import module1 as m1
 from tensorboardX import SummaryWriter
+import os
+import cv2
+import matplotlib.pyplot as plt
 
 
 writer = SummaryWriter()
 
-with open("valiset", "rb") as fp:   # Unpickling
-  a = pickle.load(fp)
-with open("trainset", "rb") as fp:   # Unpickling
-  b = pickle.load(fp)
+def arrayer(trainset_path,lable_path):
+    #cycle through the images in the folder and make them into arrays
+    first_lable = True
+    lim=50
+    for i in os.listdir(lable_path):
+        if first_lable:
+            y = cv2.imread(lable_path+i)
+            x = cv2.imread(trainset_path + i)
+            rgb = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
+            rgb = np.array(rgb)/255
+            x = np.expand_dims(rgb,3)
+            y = np.expand_dims(np.array(y),3)
+            first_lable = False
+        else:
+            img = cv2.imread(lable_path+i)
+            img = np.array(img)
+            img = np.expand_dims(img,3)
+            y = np.append(y,img,axis=3)
+            img = cv2.imread(trainset_path + i)
+            img = np.array(img)
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            rgb = np.expand_dims(rgb,3)
+            rgb = rgb/255
+            x = np.append(x,rgb,axis=3)
+        if lim == 0:
+            break
+        lim-=1
 
-def arrayer(b):
-    x = []
-    y = []
-    for m in b:
-        x.append(m[1])
-    for m in b:
-        if m[0][0]=='ok':
-            y.append([1,0,0])
-        if m[0][0]=='openplm':
-            y.append([0,1,0])
-        if m[0][0]=='thumup':
-            y.append([0,0,1])
-    x=np.array(x)
-    y=np.array(y)
-    return x,y
+            
+    return np.transpose(x,(3,2,1,0)),np.transpose(y,(3,2,1,0))
 
 batch_size = 14
 steps_before_print = 50
 step_size = 2
 
-x,y=arrayer(b)
-x1,y1=arrayer(a)
+x,y=arrayer("./Trainer/CRAID1/CRAID1/images/","./Trainer/CRAID1/CRAID1/train/PointsClass/")
+x1,y1=arrayer("./Trainer/CRAID1/CRAID1/images/","./Trainer/CRAID1/CRAID1/val/segmentationClass/")
+
 dataset = m1.dataset(x,y)
 valdata = m1.dataset(x1,y1)
 
+#plt.imshow(dataset.__getitem__(1)[1].transpose(1,2,0))
+#plt.show()
+
 dataloader = DataLoader(dataset=dataset,shuffle=True,batch_size=batch_size)
+
 validataloader = DataLoader(dataset=valdata,shuffle=True,batch_size=batch_size)
 
-model = m1.net(x.shape[1],3)
+model = m1.DensityMapModel()
 #criterion = nn.MSELoss()
-criterion = nn.CrossEntropyLoss()
+criterion = nn.MSELoss()
 optimizer = torch.optim.SGD(model.parameters(),lr=0.001)
 
 costval = []
@@ -84,11 +101,13 @@ def train(epochs):
                 times_calculated += 1
                 # Print Loss
                 print('Iteration: {}/{} - ({:.2f}%). Loss: {}. Accuracy: {}'.format(step, total_size, step*100/total_size , loss.item(), accuracy))
+                
                 if validation_loss < model.best_valdiation_loss:
                     model.best_valdiation_loss = validation_loss
                     print('Saving best model')
                     m1.save_model(model)
                 del validation_loss
+                
             del loss, outputs, images, labels
 
         model.epochs += 1

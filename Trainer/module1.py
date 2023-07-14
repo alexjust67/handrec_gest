@@ -10,16 +10,16 @@ import os
 
 class dataset(Dataset):
   
-    def __init__(self,x,y):
-        self.x = torch.tensor(x,dtype=torch.float32)
-        self.y = torch.tensor(y,dtype=torch.float32)
-        self.length = self.x.shape[0]  
+	def __init__(self,x,y):
+		self.x = torch.tensor(x,dtype=torch.float32)
+		self.y = torch.tensor(y,dtype=torch.float32)
+		self.length = self.x.shape[0]  
 		
-    def __getitem__(self,idx):
-        return self.x[idx],self.y[idx]  
-    
-    def __len__(self):
-        return self.length
+	def __getitem__(self,idx):
+		return self.x[idx],self.y[idx]  
+		
+	def __len__(self):
+		return self.length
 
 
 
@@ -57,6 +57,32 @@ class net(nn.Module):
 		
 		return output
 
+class DensityMapModel(nn.Module):
+	def __init__(self):
+		super(DensityMapModel, self).__init__()
+				
+		# Define the layers of your model
+		self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
+		self.relu1 = nn.ReLU(inplace=True)
+		self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+		self.relu2 = nn.ReLU(inplace=True)
+		self.conv3 = nn.Conv2d(64, 1, kernel_size=1, stride=1)
+		self.relu3 = nn.ReLU(inplace=True)
+		self.steps = 0
+		self.epochs = 0
+		self.best_valdiation_loss = math.inf
+	def forward(self, x):
+		x = self.conv1(x)
+		x = self.relu1(x)
+		x = self.conv2(x)
+		x = self.relu2(x)
+		x = self.conv3(x)
+		density_map = self.relu3(x)
+				
+		if self.training:
+			self.steps += 1
+				
+		return density_map
 
 
 
@@ -76,9 +102,9 @@ def calculate_loss_and_accuracy(validation_loader, model, criterion, stop_at = 1
 		
 		if total >= stop_at:
 			break;
-		#if torch.cuda.is_available():
-		#	images = images.cuda()
-		#	labels = labels.cuda()
+		if torch.cuda.is_available():
+			images = images.cuda()
+			labels = labels.cuda()
 
 		# Forward pass only to get logits/output
 		outputs = model(images)
@@ -91,6 +117,7 @@ def calculate_loss_and_accuracy(validation_loader, model, criterion, stop_at = 1
 		# Get predictions from the maximum value
 		_, predicted = torch.max(outputs.data, 1)
 		_, labels=torch.max(labels, 1)
+
 		# Total number of labels
 		total += labels.size(0)
 		steps += 1
